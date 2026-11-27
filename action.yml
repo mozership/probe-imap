@@ -1,0 +1,11 @@
+name: imap
+description: Run IMAP commands against a mail server, to search, fetch and flag messages and manage mailboxes
+guard: [allow-host]
+params: [host, port, username, password, tls, timeout, insecure_skip_tls, commands]
+res: [code, data, error]
+runs:
+  using: binary
+  # probe manifest <tag> <checksums-file> puts the tag of a release here and
+  # the digests of its executables in checksums. The release must publish
+  # the executable of each platform under this name.
+  url: https://github.com/mozership/probe-imap/releases/download/v0.0.0/probe-imap_{os}_{arch}

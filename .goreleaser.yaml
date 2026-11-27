@@ -1,0 +1,30 @@
+version: 2
+before:
+  hooks:
+    # The licenses of the modules the executable is built from, which most
+    # of them ask to go with a copy in binary form. It fails the release
+    # when a module has no license file to pass on.
+    - sh -c "probe licenses > THIRD_PARTY_LICENSES"
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+archives:
+  # Probe downloads the executable itself, so it is published unarchived.
+  - formats:
+      - binary
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+checksum:
+  name_template: checksums.txt
+release:
+  extra_files:
+    - glob: THIRD_PARTY_LICENSES
+changelog:
+  sort: asc

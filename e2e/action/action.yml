@@ -1,0 +1,8 @@
+name: imap
+description: Run IMAP commands against a mail server, to search, fetch and flag messages and manage mailboxes
+guard: [allow-host]
+params: [host, port, username, password, tls, timeout, insecure_skip_tls, commands]
+res: [code, data, error]
+runs:
+  using: binary
+  path: probe-imap

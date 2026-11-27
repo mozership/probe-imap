@@ -1,0 +1,25 @@
+# Run by e2e/workflow.yml under --allow-host, against the GreenMail it
+# started: the action connects only to a server the run allows.
+name: probe-imap under the guard
+
+actions:
+  mail: ./action
+
+vars:
+  imap_port: "{{E2E_IMAP_PORT}}"
+
+jobs:
+- name: Select INBOX
+  steps:
+  - name: Select INBOX
+    uses: mail
+    with:
+      host: localhost
+      port: "{{vars.imap_port}}"
+      username: test
+      password: password
+      tls: false
+      commands:
+      - name: select
+        mailbox: INBOX
+    test: status == 0

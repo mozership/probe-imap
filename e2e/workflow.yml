@@ -1,0 +1,208 @@
+# The end-to-end tests: GreenMail in a container, which the smtp action of
+# Probe fills with mail and this action reads, flags and moves over IMAP,
+# all in this one workflow. It runs under --allow-host, which the action
+# keeps to; the shell steps that run the container, and the smtp step that
+# sends the mail, which keeps to no guard, are let run with --allow-action.
+# Run it from the repository root, with the action built first, as Probe
+# resolves it before the first job:
+#
+#   go build -o e2e/action/probe-imap . && probe --allow-host localhost --allow-action shell,smtp e2e/workflow.yml
+#
+# E2E_CONTAINER is the container's name, DOCKER the docker command, as
+# "docker --context orbstack", and E2E_SMTP_PORT, E2E_IMAP_PORT and
+# E2E_API_PORT the ports of GreenMail on this side, and PROBE the probe the
+# last job runs another workflow with, which defaults to the one on PATH.
+name: probe-imap against GreenMail in a container
+
+# The action as it was just built. Probe up to v1.43.0 has an imap action of
+# its own, whose name a workflow cannot give to another, so it is named mail
+# here until the e2e tests run on a Probe without it.
+actions:
+  mail: ./action
+
+vars:
+  container: "{{E2E_CONTAINER ?? 'probe-imap-e2e'}}"
+  docker: "{{DOCKER ?? 'docker'}}"
+  smtp_port: "{{E2E_SMTP_PORT ?? '13025'}}"
+  imap_port: "{{E2E_IMAP_PORT ?? '13143'}}"
+  api_port: "{{E2E_API_PORT ?? '18080'}}"
+  probe: "{{PROBE ?? 'probe'}}"
+
+jobs:
+- name: Start GreenMail
+  id: server
+  steps:
+  # Before anything is started, so that whatever happens next, the container
+  # goes when the workflow ends: Probe stops a background command then, as it
+  # does when it is interrupted.
+  - name: Remove the container when the workflow ends
+    uses: shell
+    with:
+      cmd: "trap '{{vars.docker}} rm -f {{vars.container}} >/dev/null 2>&1; exit 0' TERM INT; while :; do sleep 1; done"
+      background: true
+    test: status == -1
+
+  - name: Start GreenMail
+    uses: shell
+    with:
+      cmd: >-
+        {{vars.docker}} rm -f {{vars.container}} >/dev/null 2>&1;
+        {{vars.docker}} run -d --name {{vars.container}}
+        -p {{vars.smtp_port}}:3025 -p {{vars.imap_port}}:3143 -p {{vars.api_port}}:8080
+        -e GREENMAIL_OPTS='-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.users=test:password@example.com'
+        greenmail/standalone:2.1.0
+      timeout: 300s
+    test: res.code == 0
+
+  - name: Wait for GreenMail
+    uses: http
+    with:
+      url: "http://localhost:{{vars.api_port}}"
+      get: /api/service/readiness
+    retry: {max_attempts: 60, interval: 2s}
+    test: res.code == 200
+
+  - name: Send five messages
+    uses: smtp
+    with:
+      addr: "localhost:{{vars.smtp_port}}"
+      from: sender@example.com
+      to: test@example.com
+      subject: probe-imap e2e
+      myhostname: probe-test.local
+      message: 5
+      length: 1000
+    test: res.code == 0 && res.sent == 5
+
+- name: Mailboxes and messages
+  id: mail
+  needs: [server]
+  defaults:
+    mail:
+      host: localhost
+      port: "{{vars.imap_port}}"
+      username: test
+      password: password
+      tls: false
+  steps:
+  # The server puts the mail in the mailbox after it accepts it.
+  - name: The messages are in INBOX
+    uses: mail
+    with:
+      commands:
+      - name: select
+        mailbox: INBOX
+    retry: {max_attempts: 10, interval: 1s}
+    test: status == 0 && res.code == 0 && res.data.select.exists == 5
+
+  - name: List the mailboxes
+    uses: mail
+    with:
+      commands:
+      - name: list
+        reference: ""
+        pattern: "*"
+    test: status == 0 && len(res.data.list.mailboxes) > 0
+
+  - name: Flag the first message
+    uses: mail
+    with:
+      commands:
+      - name: select
+        mailbox: INBOX
+      - name: store
+        sequence: "1"
+        dataitem: +FLAGS
+        value: '\Flagged'
+      - name: fetch
+        sequence: "1"
+        dataitem: FLAGS
+    test: res.code == 0 && "\\Flagged" in res.data.fetch.messages[0].flags
+
+  - name: Copy two messages into a new mailbox
+    uses: mail
+    with:
+      commands:
+      - name: create
+        mailbox: Probe-Copy
+      - name: select
+        mailbox: INBOX
+      - name: copy
+        sequence: "1:2"
+        mailbox: Probe-Copy
+      - name: examine
+        mailbox: Probe-Copy
+      - name: select
+        mailbox: INBOX
+      - name: delete
+        mailbox: Probe-Copy
+    test: res.code == 0 && res.data.examine.exists == 2
+
+  - name: Fetch the envelopes by UID
+    uses: mail
+    with:
+      commands:
+      - name: select
+        mailbox: INBOX
+      - name: uid fetch
+        sequence: "1:*"
+        dataitem: (UID FLAGS ENVELOPE)
+    test: |
+      let mail = res.data.fetch.messages;
+      res.code == 0 && len(mail) == 5 &&
+      all(mail, #.subject contains "probe-imap e2e") &&
+      count(mail, "\\Flagged" in #.flags) == 1
+
+  - name: A header of the messages
+    uses: mail
+    with:
+      commands:
+      - name: select
+        mailbox: INBOX
+      - name: uid fetch
+        sequence: "1:*"
+        dataitem: "BODY[HEADER.FIELDS (Return-Path)]"
+    test: status == 0 && len(res.data.fetch.messages) == 5
+
+  - name: A command that fails is the error of the result
+    uses: mail
+    with:
+      commands:
+      - name: select
+        mailbox: Does-Not-Exist
+    test: status == 1 && res.code != 0 && res.error != ""
+
+- name: Under the guard
+  needs: [mail]
+  steps:
+  # Probe is run again on a workflow that selects INBOX, under --allow-host.
+  # A step the guard refuses ends that run with the exit code 2.
+  - name: A server the run allows is connected to
+    uses: shell
+    with:
+      cmd: "{{vars.probe}} --allow-host localhost e2e/guard.yml"
+      env:
+        E2E_IMAP_PORT: "{{vars.imap_port}}"
+      timeout: 60s
+    test: res.code == 0
+    echo: "{{res.stdout}}{{res.stderr}}"
+
+  - name: A server the run does not allow is refused
+    uses: shell
+    with:
+      cmd: "{{vars.probe}} --allow-host example.com e2e/guard.yml"
+      env:
+        E2E_IMAP_PORT: "{{vars.imap_port}}"
+      timeout: 60s
+    test: res.code == 2 && (res.stdout + res.stderr) contains "is not one the run allows"
+    echo: "{{res.stdout}}{{res.stderr}}"
+
+  - name: Under --read-only, which it does not keep to, it is refused
+    uses: shell
+    with:
+      cmd: "{{vars.probe}} --read-only e2e/guard.yml"
+      env:
+        E2E_IMAP_PORT: "{{vars.imap_port}}"
+      timeout: 60s
+    test: res.code == 2
+    echo: "{{res.stdout}}{{res.stderr}}"
