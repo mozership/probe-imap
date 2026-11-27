@@ -5,7 +5,9 @@ params: [host, port, username, password, tls, timeout, insecure_skip_tls, comman
 res: [code, data, error]
 runs:
   using: binary
-  # probe manifest <tag> <checksums-file> puts the tag of a release here and
-  # the digests of its executables in checksums. The release must publish
-  # the executable of each platform under this name.
-  url: https://github.com/mozership/probe-imap/releases/download/v0.0.0/probe-imap_{os}_{arch}
+  url: https://github.com/mozership/probe-imap/releases/download/v0.1.0/probe-imap_{os}_{arch}
+  checksums:
+    darwin_amd64: "f9b83e84918acecca4bfbd40e699bd377153bc33064c999c1869e1e3bd916101"
+    darwin_arm64: "529525a66cdf4cf30fa82b896ecec2411492d167af8a2f987ead4da8e0efe11c"
+    linux_amd64: "71e43a0c79d9871939eae1b6f57697dda0e0854316f5f32db3c4c5a992acd136"
+    linux_arm64: "24f58871018d4dafc9ed8945087d3cff0b37996a461cc086fc0c819e9c011f49"
