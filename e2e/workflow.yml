@@ -14,11 +14,9 @@
 # last job runs another workflow with, which defaults to the one on PATH.
 name: probe-imap against GreenMail in a container
 
-# The action as it was just built. Probe up to v1.43.0 has an imap action of
-# its own, whose name a workflow cannot give to another, so it is named mail
-# here until the e2e tests run on a Probe without it.
+# The action as it was just built.
 actions:
-  mail: ./action
+  imap: ./action
 
 vars:
   container: "{{E2E_CONTAINER ?? 'probe-imap-e2e'}}"
@@ -78,7 +76,7 @@ jobs:
   id: mail
   needs: [server]
   defaults:
-    mail:
+    imap:
       host: localhost
       port: "{{vars.imap_port}}"
       username: test
@@ -87,7 +85,7 @@ jobs:
   steps:
   # The server puts the mail in the mailbox after it accepts it.
   - name: The messages are in INBOX
-    uses: mail
+    uses: imap
     with:
       commands:
       - name: select
@@ -96,7 +94,7 @@ jobs:
     test: status == 0 && res.code == 0 && res.data.select.exists == 5
 
   - name: List the mailboxes
-    uses: mail
+    uses: imap
     with:
       commands:
       - name: list
@@ -105,7 +103,7 @@ jobs:
     test: status == 0 && len(res.data.list.mailboxes) > 0
 
   - name: Flag the first message
-    uses: mail
+    uses: imap
     with:
       commands:
       - name: select
@@ -120,7 +118,7 @@ jobs:
     test: res.code == 0 && "\\Flagged" in res.data.fetch.messages[0].flags
 
   - name: Copy two messages into a new mailbox
-    uses: mail
+    uses: imap
     with:
       commands:
       - name: create
@@ -139,7 +137,7 @@ jobs:
     test: res.code == 0 && res.data.examine.exists == 2
 
   - name: Fetch the envelopes by UID
-    uses: mail
+    uses: imap
     with:
       commands:
       - name: select
@@ -154,7 +152,7 @@ jobs:
       count(mail, "\\Flagged" in #.flags) == 1
 
   - name: A header of the messages
-    uses: mail
+    uses: imap
     with:
       commands:
       - name: select
@@ -165,7 +163,7 @@ jobs:
     test: status == 0 && len(res.data.fetch.messages) == 5
 
   - name: A command that fails is the error of the result
-    uses: mail
+    uses: imap
     with:
       commands:
       - name: select

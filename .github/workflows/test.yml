@@ -35,7 +35,7 @@ jobs:
         uses: mozership/probe-action@831b8b6c6aa0c8a61aa75b58f36a08da5c579e83 # v1.3.0
         with:
           install-only: true
-          version: v1.43.0
+          version: v1.44.0
       # Under --allow-host, which the action keeps to. The shell steps that
       # run the container, and the smtp step, are let run with --allow-action.
       - run: probe --allow-host localhost --allow-action shell,smtp --report github-summary e2e/workflow.yml
