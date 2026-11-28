@@ -416,7 +416,7 @@ steps:
 
 The action keeps to `--allow-host`, as `action.yml` declares with `guard: [allow-host]`: it connects only to a `host` the run allows, at `port`, which is `993` when it is not given, as `--allow-host imap.example.com` or `--allow-host imap.example.com:993` allows. A step for another server is refused before it connects.
 
-It does not keep to `--read-only`, as its commands may change a mailbox: `store` flags messages, `copy`, `create`, `delete` and `rename` change mailboxes, and `fetch` of `BODY[...]` marks messages read. Under `--read-only`, a step that uses it is refused unless the run allows it by name, as `--allow-action imap` does.
+It does not keep to `--read-only`, as its commands may change a mailbox: `store` flags messages, `copy`, `create`, `delete` and `rename` change mailboxes, and `fetch` of `BODY[...]` marks messages read. Under `--read-only`, a step that uses it is refused unless `--allow-action` names it as it is written under `actions`, such as `--allow-action github.com/mozership/probe-imap@<commit SHA>`. The name `imap` that the workflow gives it is not enough, so that a workflow cannot give that name to another action to have it run.
 
 A refused step fails with the kind `refused`.
 
@@ -427,7 +427,7 @@ go test ./...
 go build -o e2e/action/probe-imap . && probe --allow-host localhost --allow-action shell,smtp e2e/workflow.yml
 ```
 
-The workflow under `e2e` starts GreenMail in a container, fills it with mail by the smtp action of Probe, and runs the action through Probe against it, under `--allow-host`, and again under the guard. It names the action as it was just built `mail`, as Probe up to v1.43.0 keeps the name `imap` for its own.
+The workflow under `e2e` starts GreenMail in a container, fills it with mail by the smtp action of Probe, and runs the action through Probe against it, under `--allow-host`, and again under the guard.
 
 ## License
 
